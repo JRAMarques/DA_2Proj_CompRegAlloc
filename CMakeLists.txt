@@ -14,6 +14,7 @@ include_directories(include)
 
 # grab all the source files inside the src folder
 file(GLOB SOURCES "src/*.cpp")
+file(GLOB HEADERS "include/*.h")
 
 # create the final executable named 'myProg' as requested in the project specs
-add_executable(myProg ${SOURCES})
+add_executable(myProg ${SOURCES} ${HEADERS})
