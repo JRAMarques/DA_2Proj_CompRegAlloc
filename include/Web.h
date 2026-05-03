@@ -76,6 +76,13 @@ struct Web {
         }
         return false;
     }
+
+    /**
+     * @brief Operator overloading so the Graph template can compare Webs.
+     */
+    bool operator==(const Web& other) const {
+        return this->id == other.id;
+    }
 };
 
 #endif

@@ -29,8 +29,7 @@ private:
      *
      * @note Time Complexity: O(V + E) where V is the number of webs and E is the number of interferences.
      */
-    bool colorGraph(int numRegisters);
-
+    bool colorGraph(int numRegisters, int maxSpills);
     /**
      * @brief Populates the interference graph based on the webs' live ranges.
      *
