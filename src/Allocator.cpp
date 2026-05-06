@@ -188,7 +188,92 @@ void RegisterAllocator::runSpillingAllocation() {
     }
 }
 
-void RegisterAllocator::runSplittingAllocation() {}
+/* slices large webs into smaller ones to break interferences */
+void RegisterAllocator::runSplittingAllocation() {
+    int maxSplits = config.algoParameter;
+    int splitsDone = 0;
+
+    // find the highest web ID so we can assign new IDs to the split pieces
+    int nextWebId = 0;
+    for (const auto& w : webs) {
+        if (w.id >= nextWebId) nextWebId = w.id + 1;
+    }
+
+    while (true) {
+        // 1. clean up the graph from previous iterations
+        while (interferenceGraph.getNumVertex() > 0) {
+            interferenceGraph.removeVertex(interferenceGraph.getVertexSet().front()->getInfo());
+        }
+
+        // 2. build the graph with the current set of webs
+        buildInterferenceGraph();
+
+        // 3. try to color (passing 0 for maxSpills, since we are doing splits here)
+        if (colorGraph(config.maxRegisters, 0)) {
+            return; // success! we colored it.
+        }
+
+        // 4. if we ran out of splits, we fail and dump everything to memory
+        if (splitsDone >= maxSplits) {
+            std::cerr << "Warning: Allocation failed even after " << maxSplits
+                      << " splits. Moving all to memory.\n";
+            for (auto& web : webs) {
+                web.assignedRegister = -1;
+            }
+            return;
+        }
+
+        // 5. SPLITTING HEURISTIC: Find the web with the most active lines
+        auto bestToSplit = webs.end();
+        size_t maxLines = 1; // we need at least 2 lines to be able to split it
+
+        for (auto it = webs.begin(); it != webs.end(); ++it) {
+            // we just want the web with the most lines (needs at least 2 to split)
+            if (it->activeLines.size() > maxLines) {
+                maxLines = it->activeLines.size();
+                bestToSplit = it;
+            }
+        }
+
+        // if we can't find any web to split, we are completely stuck
+        if (bestToSplit == webs.end()) {
+            std::cerr << "Warning: Graph is uncolorable and no webs can be split further.\n";
+            for (auto& web : webs) {
+                web.assignedRegister = -1;
+            }
+            return;
+        }
+
+        // 6. perform the actual split
+        Web w1(nextWebId++, bestToSplit->varName);
+        Web w2(nextWebId++, bestToSplit->varName);
+
+        // distribute the lines evenly between the two new webs
+        int count = 0;
+        int midPoint = bestToSplit->activeLines.size() / 2;
+
+        for (int line : bestToSplit->activeLines) {
+            if (count < midPoint) {
+                w1.activeLines.insert(line);
+                if (bestToSplit->defLines.count(line)) w1.defLines.insert(line);
+                if (bestToSplit->useLines.count(line)) w1.useLines.insert(line);
+            } else {
+                w2.activeLines.insert(line);
+                if (bestToSplit->defLines.count(line)) w2.defLines.insert(line);
+                if (bestToSplit->useLines.count(line)) w2.useLines.insert(line);
+            }
+            count++;
+        }
+
+        // remove the original giant web and insert the two smaller pieces
+        webs.erase(bestToSplit);
+        webs.push_back(w1);
+        webs.push_back(w2);
+
+        splitsDone++;
+        // the loop restarts, building a new (hopefully simpler) graph!
+    }
+}
 
 void RegisterAllocator::runFreeAllocation() {}
 
