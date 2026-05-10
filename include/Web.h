@@ -3,6 +3,7 @@
 
 #include <string>
 #include <set>
+#include <utility>
 
 /**
  * @brief Represents a single web (a union of overlapping live ranges for a specific variable).
@@ -82,6 +83,68 @@ struct Web {
      */
     bool operator==(const Web& other) const {
         return this->id == other.id;
+    }
+
+    /**
+     * @brief Analisa os live ranges para detetar o maior intervalo de inatividade.
+     * @return pair<int, int> onde o first é o tamanho do maior intervalo e o second é a linha de corte.
+     */
+    std::pair<int, int> findBiggestHole() const {
+        if (activeLines.size() < 2) {
+            return {0, -1}; //não dá para dividir uma web com menos de 2 linhas
+        }
+
+        int maxGap = 0;
+        int splitPoint = -1;
+        int previousLine = -1;
+
+        //o set já garante que as linhas estão ordenadas cronologicamente
+        for (int line : activeLines) {
+            if (previousLine != -1) {
+                int gap = line - previousLine;
+
+                //um gap > 1 significa que existe pelo menos uma linha de inatividade
+                if (gap > maxGap && gap > 1) {
+                    maxGap = gap;
+                    splitPoint = line;
+                }
+            }
+            previousLine = line;
+        }
+        return {maxGap, splitPoint};
+    }
+
+    /**
+     * @brief Divide físicamente a Web em duas instâncias independentes com base num ponto de corte.
+     * @param newId1 O ID a atribuir à primeira fração.
+     * @param newId2 O ID a atribuir à segunda fração.
+     * @param splitPoint Linha que delimita a fronteira da divisão.
+     * @return Um std::pair contendo as duas novas Webs instanciadas(_A e _B).
+     */
+    std::pair<Web, Web> split(int newId1, int newId2, int splitPoint) const {
+        //acrescentar os sufixos _A e _B para distinguir as variáveis fracionadas no output
+        Web part1(newId1, this->varName + "_A");
+        Web part2(newId2, this->varName + "_B");
+
+        //distribuição das linhas ativas
+        for (int line : this->activeLines) {
+            if (line < splitPoint) part1.activeLines.insert(line);
+            else part2.activeLines.insert(line);
+        }
+
+        //distribuição das definições (+)
+        for (int line : this->defLines) {
+            if (line < splitPoint) part1.defLines.insert(line);
+            else part2.defLines.insert(line);
+        }
+
+        //distribuição das utilizações (-)
+        for (int line : this->useLines) {
+            if (line < splitPoint) part1.useLines.insert(line);
+            else part2.useLines.insert(line);
+        }
+
+        return {part1, part2};
     }
 };
 

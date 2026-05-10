@@ -111,9 +111,18 @@
                         std::cout << "Concluido! Ficheiro gerado em: " << outputFile << "\n";
                         break;
                     }
-                    case 3:
+                    case 3: {
                         std::cout << "Running splitting allocation...\n";
+                        std::string splittingRegisters = "../registers/registers1.txt";
+                        std::vector<Web> webs = Parser::parseLiveRanges(rangesFile);
+                        Config config = Parser::parseConfig(splittingRegisters);
+                        if (config.algoParameter <= 0) config.algoParameter = 3;
+                        RegisterAllocator allocator(webs, config);
+                        allocator.runSplittingAllocation();
+                        allocator.generateOutput(outputFile);
+                        std::cout << "Concluido! Ficheiro gerado em: " << outputFile << "\n";
                         break;
+                    }
                     case 4:
                         std::cout << "Running free allocation...\n";
                         break;

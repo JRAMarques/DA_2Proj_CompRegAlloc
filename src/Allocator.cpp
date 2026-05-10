@@ -35,8 +35,7 @@ bool RegisterAllocator::colorGraph(int numRegisters, int maxSpills) {
     std::stack<int> s;
     int spillsUsed = 0;
 
-    // Criamos uma lista de adjacências temporária para podermos ir "apagando"
-    // os nós durante a Fase 1 sem estragarmos o grafo original.
+    // Cópia temporária da lista de adjacências para manipulação durante a Fase 1
     std::map<int, std::set<int>> adjList;
     for (auto* vertex : interferenceGraph.getVertexSet()) {
         int id = vertex->getInfo();
@@ -46,44 +45,30 @@ bool RegisterAllocator::colorGraph(int numRegisters, int maxSpills) {
         }
     }
 
-    // ====================================================================
-    // FASE 1: Simplificação (Drenar o grafo para a stack)
-    // ====================================================================
+    //fase 1: Drenagem do grafo para a stack
     while (!adjList.empty()) {
         bool foundNodeToRemove = false;
 
-        // Procuramos um nó que tenha um grau menor que o número de registos disponíveis
         for (auto it = adjList.begin(); it != adjList.end(); ++it) {
             int nodeId = it->first;
             int degree = it->second.size();
 
+            // Nós com grau inferior aos registos disponíveis vão para a stack
             if (degree < numRegisters) {
-                // Se o grau é menor, é seguro metê-lo na stack
                 s.push(nodeId);
-
-                // Apagamos este nó da lista de contactos dos vizinhos dele
                 for (int neighbor : it->second) {
                     adjList[neighbor].erase(nodeId);
                 }
-
-                // Removemos o nó do nosso grafo temporário
                 adjList.erase(it);
                 foundNodeToRemove = true;
-                break; // Começamos a busca de novo desde o início
+                break;
             }
         }
 
-        // ====================================================================
-        // O GRAFO FICOU PRESO (Todos os nós restantes têm grau >= numRegisters)
-        // ====================================================================
+        // Deadlock: Todos os nós restantes têm grau >= numRegisters
         if (!foundNodeToRemove && !adjList.empty()) {
-
-            // Em vez de desistir, vamos ver se ainda podemos deitar um nó para a memória (spill)
             if (spillsUsed < maxSpills) {
-
-                // HEURÍSTICA DE INTELIGÊNCIA:
-                // Vamos procurar o nó com o MAIOR GRAU (o que tem mais vizinhos).
-                // Ao matarmos o vizinho mais problemático, aliviamos a pressão no resto do grafo!
+                // Heurística de Spilling: Escolher o nó com maior grau para atirar para a memória
                 auto maxIt = adjList.begin();
                 for (auto it = adjList.begin(); it != adjList.end(); ++it) {
                     if (it->second.size() > maxIt->second.size()) {
@@ -93,42 +78,33 @@ bool RegisterAllocator::colorGraph(int numRegisters, int maxSpills) {
 
                 int nodeToSpill = maxIt->first;
 
-                // Apagamos o nó problemático das listas dos vizinhos dele
+                //apagamo-se o nó problemático das listas dos vizinhos dele
                 for (int neighbor : maxIt->second) {
                     adjList[neighbor].erase(nodeToSpill);
                 }
-                adjList.erase(maxIt); // Removemo-lo do grafo temporário
+                adjList.erase(maxIt); //remove-lo do grafo temporário
 
-                // CRÍTICO: Marcamos logo este nó para ir para a memória (-1).
-                // Como NÃO o colocamos na stack 's', a Fase 2 vai ignorá-lo completamente!
+                //o nó removido não entra na stack e é marcado como memória (-1)
                 auto itWeb = std::find_if(webs.begin(), webs.end(),
                                           [nodeToSpill](const Web& w){ return w.id == nodeToSpill; });
                 if (itWeb != webs.end()) {
                     itWeb->assignedRegister = -1;
                 }
-
                 spillsUsed++;
-                // O ciclo volta a rodar! Conseguimos desbloquear o grafo.
-
             } else {
-                // Ficámos mesmo presos e já esgotámos os nossos "jokers" de spill.
-                // O algoritmo falhou.
+                //falha na coloração após esgotar tentativas de spill
                 return false;
             }
         }
     }
 
-    // ====================================================================
-    // FASE 2: Coloração (Atribuir registos aos nós que estão na stack)
-    // ====================================================================
-
-    // Um mapa rápido para conseguirmos encontrar as nossas Webs pelo ID
+    // Fase 2: Atribuição de cores (registos)
     std::map<int, Web*> webMap;
     for (auto& web : webs) {
         webMap[web.id] = &web;
     }
 
-    // Tiramos os nós da stack um a um (o último a entrar é o primeiro a sair)
+    //tira-se os nós da stack um a um (o último a entrar é o primeiro a sair)
     while (!s.empty()) {
         int nodeId = s.top();
         s.pop();
@@ -172,8 +148,6 @@ void RegisterAllocator::runBasicAllocation() {
 }
 
 
-// todo: if colorGraph() fails, pick 'k' webs to spill (via config.algoParameter),
-// remove them from the graph and try coloring again.
 void RegisterAllocator::runSpillingAllocation() {
     buildInterferenceGraph();
 
@@ -188,8 +162,86 @@ void RegisterAllocator::runSpillingAllocation() {
     }
 }
 
-void RegisterAllocator::runSplittingAllocation() {}
+void RegisterAllocator::runSplittingAllocation() {
+    int maxSplits = config.algoParameter;
+    int splitsPerformed = 0;
+    bool success = false;
 
+    // 1. Tentar uma coloração inicial sem qualquer divisão
+    buildInterferenceGraph();
+    success = colorGraph(config.maxRegisters, 0);
+
+    // 2. Se falhar, iniciar o processo iterativo de Splitting
+    while (!success && splitsPerformed < maxSplits) {
+        int bestWebIndex = -1;
+        int maxHoleSize = 0;
+        int bestSplitPoint = -1;
+
+        // Procurar a Web com o maior "buraco" (intervalo de inatividade)
+        for (size_t i = 0; i < webs.size(); ++i) {
+            auto holeInfo = webs[i].findBiggestHole();
+            int holeSize = holeInfo.first;
+            int splitPoint = holeInfo.second;
+
+            if (holeSize > maxHoleSize) {
+                maxHoleSize = holeSize;
+                bestSplitPoint = splitPoint;
+                bestWebIndex = static_cast<int>(i);
+            }
+        }
+
+        // Condição de paragem: interrupção se não existirem buracos elegíveis para divisão
+        if (bestWebIndex == -1 || maxHoleSize <= 1) {
+            break;
+        }
+
+        // Extrair os dados necessários para a operação de divisão
+        Web targetWeb = webs[bestWebIndex];
+
+        // Determinar os próximos IDs disponíveis para as novas frações, garantindo a unicidade no grafo
+        int maxId = 0;
+        for (const auto& w : webs) {
+            if (w.id > maxId) {
+                maxId = w.id;
+            }
+        }
+
+        // Executar a divisão física da variável
+        auto newWebs = targetWeb.split(maxId + 1, maxId + 2, bestSplitPoint);
+
+        // Substituir a Web original pelas duas frações no vetor de processamento
+        webs.erase(webs.begin() + bestWebIndex);
+        webs.push_back(newWebs.first);
+        webs.push_back(newWebs.second);
+
+        splitsPerformed++;
+
+        // Limpar os vértices do grafo de interferência antigo antes de iniciar a reconstrução
+        std::vector<int> nodesToRemove;
+        for (auto* vertex : interferenceGraph.getVertexSet()) {
+            nodesToRemove.push_back(vertex->getInfo());
+        }
+        for (int id : nodesToRemove) {
+            interferenceGraph.removeVertex(id);
+        }
+
+        // Reconstruir o grafo com a nova topologia fracionada e testar a coloração
+        buildInterferenceGraph();
+        success = colorGraph(config.maxRegisters, 0);
+    }
+
+    // 3. Procedimento de Recurso: Se a coloração permanecer impossível após esgotar o limite K,
+    // as variáveis não alocadas transitam, por inerência, para a memória.
+    if (!success) {
+        std::cerr << "Aviso: A alocacao com Splitting esgotou as " << splitsPerformed
+                  << " divisoes e ainda carece de registos. As variaveis sobrantes transitam para a memoria.\n";
+        for (auto& web : webs) {
+            if (web.assignedRegister == -1) {
+                web.assignedRegister = -1; // Consolida a marcação 'M' no output
+            }
+        }
+    }
+}
 void RegisterAllocator::runFreeAllocation() {}
 
 
