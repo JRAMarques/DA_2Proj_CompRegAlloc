@@ -242,7 +242,17 @@ void RegisterAllocator::runSplittingAllocation() {
         }
     }
 }
-void RegisterAllocator::runFreeAllocation() {}
+void RegisterAllocator::runFreeAllocation() {
+    buildInterferenceGraph();
+
+    std::sort(webs.begin(), webs.end(), [](const Web& a, const Web& b) {
+        return (a.useLines.size() + a.defLines.size()) > (b.useLines.size() + b.defLines.size());
+    });
+
+    if (!colorGraph(config.maxRegisters, config.maxRegisters)) {
+        for (auto& web : webs) { web.assignedRegister = -1; }
+    }
+}
 
 
 // writes the output file in the exact format required by the spec.
