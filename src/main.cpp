@@ -98,7 +98,7 @@
                         allocator.runBasicAllocation();
                         // 3. Gerar o ficheiro de saída
                         allocator.generateOutput(outputDir);
-                        std::cout << "Concluido! Ficheiro gerado em: " << outputDir << "\n";
+                        std::cout << "Allocation complete. Results saved to: " << outputDir << "\n";
                         break;
                     }
                     case 2: {
@@ -108,7 +108,7 @@
                         RegisterAllocator allocator(webs, config);
                         allocator.runSpillingAllocation();
                         allocator.generateOutput(outputDir);
-                        std::cout << "Concluido! Ficheiro gerado em: " << outputDir << "\n";
+                        std::cout << "Allocation complete. Results saved to: " << outputDir << "\n";
                         break;
                     }
                     case 3: {
@@ -120,7 +120,7 @@
                         RegisterAllocator allocator(webs, config);
                         allocator.runSplittingAllocation();
                         allocator.generateOutput(outputDir);
-                        std::cout << "Concluido! Ficheiro gerado em: " << outputDir << "\n";
+                        std::cout << "Allocation complete. Results saved to: " << outputDir << "\n";
                         break;
                     }
                     case 4:
