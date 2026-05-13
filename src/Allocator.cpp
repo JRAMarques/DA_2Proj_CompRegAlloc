@@ -35,7 +35,7 @@ bool RegisterAllocator::colorGraph(int numRegisters, int maxSpills) {
     std::stack<int> s;
     int spillsUsed = 0;
 
-    // Cópia temporária da lista de adjacências para manipulação durante a Fase 1
+    // Copy of the adjency list to manipulate during step 1
     std::map<int, std::set<int>> adjList;
     for (auto* vertex : interferenceGraph.getVertexSet()) {
         int id = vertex->getInfo();
@@ -45,7 +45,7 @@ bool RegisterAllocator::colorGraph(int numRegisters, int maxSpills) {
         }
     }
 
-    //fase 1: Drenagem do grafo para a stack
+    //Step 1: Sending from the stack to the graph
     while (!adjList.empty()) {
         bool foundNodeToRemove = false;
 
@@ -53,7 +53,7 @@ bool RegisterAllocator::colorGraph(int numRegisters, int maxSpills) {
             int nodeId = it->first;
             int degree = it->second.size();
 
-            // Nós com grau inferior aos registos disponíveis vão para a stack
+            // Nodes with degree inferior to available registers are sent to the stack
             if (degree < numRegisters) {
                 s.push(nodeId);
                 for (int neighbor : it->second) {
@@ -65,10 +65,10 @@ bool RegisterAllocator::colorGraph(int numRegisters, int maxSpills) {
             }
         }
 
-        // Deadlock: Todos os nós restantes têm grau >= numRegisters
+        // Deadlock: Every node has degree >= numRegisters
         if (!foundNodeToRemove && !adjList.empty()) {
             if (spillsUsed < maxSpills) {
-                // Heurística de Spilling: Escolher o nó com maior grau para atirar para a memória
+                // Spilling Heuristic: Choosing the node with the highest degree
                 auto maxIt = adjList.begin();
                 for (auto it = adjList.begin(); it != adjList.end(); ++it) {
                     if (it->second.size() > maxIt->second.size()) {
@@ -78,13 +78,13 @@ bool RegisterAllocator::colorGraph(int numRegisters, int maxSpills) {
 
                 int nodeToSpill = maxIt->first;
 
-                //apagamo-se o nó problemático das listas dos vizinhos dele
+                //delete the node from the lists
                 for (int neighbor : maxIt->second) {
                     adjList[neighbor].erase(nodeToSpill);
                 }
-                adjList.erase(maxIt); //remove-lo do grafo temporário
+                adjList.erase(maxIt); //removed from the temporary graph
 
-                //o nó removido não entra na stack e é marcado como memória (-1)
+                //removed node doesn't enter the stack and is marked (-1)
                 auto itWeb = std::find_if(webs.begin(), webs.end(),
                                           [nodeToSpill](const Web& w){ return w.id == nodeToSpill; });
                 if (itWeb != webs.end()) {
@@ -92,47 +92,47 @@ bool RegisterAllocator::colorGraph(int numRegisters, int maxSpills) {
                 }
                 spillsUsed++;
             } else {
-                //falha na coloração após esgotar tentativas de spill
+                //fails at coloring after exceeding spill k trials
                 return false;
             }
         }
     }
 
-    // Fase 2: Atribuição de cores (registos)
+    // Step 2: Assigning colors to registers
     std::map<int, Web*> webMap;
     for (auto& web : webs) {
         webMap[web.id] = &web;
     }
 
-    //tira-se os nós da stack um a um (o último a entrar é o primeiro a sair)
+    //take the nodes from the stack (FIFO)
     while (!s.empty()) {
         int nodeId = s.top();
         s.pop();
 
-        std::set<int> takenColors; // Cores que já estão ocupadas pelos vizinhos
+        std::set<int> takenColors; // Colors taken by the neighborhood
         auto* vertex = interferenceGraph.findVertex(nodeId);
 
-        // Vamos cuscar as cores dos vizinhos deste nó
+        // checking neighbor colors
         for (auto* edge : vertex->getAdj()) {
             int neighborId = edge->getDest()->getInfo();
             int neighborColor = webMap[neighborId]->assignedRegister;
 
-            // Se o vizinho já tiver uma cor (não é -1), guardamos essa cor nas ocupadas
+            // If the neighbor already has a color (not -1), we save it as taken
             if (neighborColor != -1) {
                 takenColors.insert(neighborColor);
             }
         }
 
-        // Atribuir a PRIMEIRA cor (registo) que esteja livre
+        // Assign the first free color (registo)
         for (int color = 0; color < numRegisters; ++color) {
             if (takenColors.find(color) == takenColors.end()) {
                 webMap[nodeId]->assignedRegister = color;
-                break; // Cor atribuída, podemos passar ao próximo nó
+                break; // Color is assigned
             }
         }
     }
 
-    return true; // Sucesso! O grafo foi colorido.
+    return true;
 }
 
 // builds the graph and tries to color it. if it fails, all webs go to memory (m).
@@ -140,7 +140,7 @@ void RegisterAllocator::runBasicAllocation() {
     buildInterferenceGraph();
 
     if (!colorGraph(config.maxRegisters,0)) {
-        std::cerr << "Warning: Basic allocation failed. Not enough registers. Moving all to memory.\n";
+        std::cerr << "Warning: Basic allocation failed. Not enough registers. Moving all the variables to memory.\n";
         for (auto& web : webs) {
             web.assignedRegister = -1; // -1 means memory
         }
@@ -151,11 +151,10 @@ void RegisterAllocator::runBasicAllocation() {
 void RegisterAllocator::runSpillingAllocation() {
     buildInterferenceGraph();
 
-    // Na alocação com Spilling, deixamos o algoritmo deitar fora até 'K' webs
-    // (este K vem do ficheiro de configuração, ex: algoritmo: spilling, 2)
+    // In the Spilling Allocation, we let the algorithm throwing 'K' webs
     if (!colorGraph(config.maxRegisters, config.algoParameter)) {
-        std::cerr << "Aviso: A alocacao falhou mesmo usando "
-                  << config.algoParameter << " spills. Todas as variaveis vao para a memoria.\n";
+        std::cerr << "Warning: the allocation failed using "
+                  << config.algoParameter << " spills. Moving all the variables to memory.\n";
         for (auto& web : webs) {
             web.assignedRegister = -1;
         }
@@ -167,17 +166,17 @@ void RegisterAllocator::runSplittingAllocation() {
     int splitsPerformed = 0;
     bool success = false;
 
-    // 1. Tentar uma coloração inicial sem qualquer divisão
+    // Initial coloring with no splitting
     buildInterferenceGraph();
     success = colorGraph(config.maxRegisters, 0);
 
-    // 2. Se falhar, iniciar o processo iterativo de Splitting
+    // Iteratively splits
     while (!success && splitsPerformed < maxSplits) {
         int bestWebIndex = -1;
         int maxHoleSize = 0;
         int bestSplitPoint = -1;
 
-        // Procurar a Web com o maior "buraco" (intervalo de inatividade)
+        // Searches the web with the largest hole
         for (size_t i = 0; i < webs.size(); ++i) {
             auto holeInfo = webs[i].findBiggestHole();
             int holeSize = holeInfo.first;
@@ -190,15 +189,15 @@ void RegisterAllocator::runSplittingAllocation() {
             }
         }
 
-        // Condição de paragem: interrupção se não existirem buracos elegíveis para divisão
+        // Stop condition: breaks if there are no holes to splitting
         if (bestWebIndex == -1 || maxHoleSize <= 1) {
             break;
         }
 
-        // Extrair os dados necessários para a operação de divisão
+        // Extracting the data needed for the splitting operation
         Web targetWeb = webs[bestWebIndex];
 
-        // Determinar os próximos IDs disponíveis para as novas frações, garantindo a unicidade no grafo
+        // Determine the next available IDs to split
         int maxId = 0;
         for (const auto& w : webs) {
             if (w.id > maxId) {
@@ -206,17 +205,17 @@ void RegisterAllocator::runSplittingAllocation() {
             }
         }
 
-        // Executar a divisão física da variável
+        // Executing the physical split
         auto newWebs = targetWeb.split(maxId + 1, maxId + 2, bestSplitPoint);
 
-        // Substituir a Web original pelas duas frações no vetor de processamento
+        // Substituting the original web by the fractions
         webs.erase(webs.begin() + bestWebIndex);
         webs.push_back(newWebs.first);
         webs.push_back(newWebs.second);
 
         splitsPerformed++;
 
-        // Limpar os vértices do grafo de interferência antigo antes de iniciar a reconstrução
+        // Cleaning the old interference graph vertices before reconstructing
         std::vector<int> nodesToRemove;
         for (auto* vertex : interferenceGraph.getVertexSet()) {
             nodesToRemove.push_back(vertex->getInfo());
@@ -225,19 +224,18 @@ void RegisterAllocator::runSplittingAllocation() {
             interferenceGraph.removeVertex(id);
         }
 
-        // Reconstruir o grafo com a nova topologia fracionada e testar a coloração
+        // Reconstructing the graph
         buildInterferenceGraph();
         success = colorGraph(config.maxRegisters, 0);
     }
 
-    // 3. Procedimento de Recurso: Se a coloração permanecer impossível após esgotar o limite K,
-    // as variáveis não alocadas transitam, por inerência, para a memória.
+    // If the coloring is still impossible the non-allocated variables are sent to memory
     if (!success) {
-        std::cerr << "Aviso: A alocacao com Splitting esgotou as " << splitsPerformed
-                  << " divisoes e ainda carece de registos. As variaveis sobrantes transitam para a memoria.\n";
+        std::cerr << "Warning: the Splitting Allocation has consumed " << splitsPerformed
+                  << " splittings and still misses registers. The remaining variables are sent to memory.\n";
         for (auto& web : webs) {
             if (web.assignedRegister == -1) {
-                web.assignedRegister = -1; // Consolida a marcação 'M' no output
+                web.assignedRegister = -1;
             }
         }
     }

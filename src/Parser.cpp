@@ -73,8 +73,11 @@ std::vector<Web> Parser::parseLiveRanges(const std::string& filename) {
                 tempWeb.activeLines.insert(lineNum);
                 if (isDef) tempWeb.defLines.insert(lineNum);
                 if (isUse) tempWeb.useLines.insert(lineNum);
-            } catch (...) {
-                std::cerr << "Warning: Failed to parse line number '" << token << "'\n";
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "Error: '" << token << "' is not a valid number.\n";
+            }
+            catch (const std::out_of_range& e) {
+                    std::cerr << "Error: Line number '" << token << "' is too large.\n";
             }
         }
 
