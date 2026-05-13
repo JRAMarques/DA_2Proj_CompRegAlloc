@@ -25,7 +25,7 @@
         // T1.1: we need to support a batch mode executed via script[cite: 1]
         // the arguments must be: myProg -b ranges.txt registers.txt allocation.txt[cite: 1]
         bool isBatchMode = false;
-        std::string rangesFile, registersFile, outputFile;
+        std::string rangesFile, registersFile, outputFile, outputDir;
 
         if (argc >= 5 && std::string(argv[1]) == "-b") {
             isBatchMode = true;
@@ -60,8 +60,9 @@
                 }
 
                 // finally -> generate output
-                allocator.generateOutput(outputFile);
-                std::cout << "Allocation complete. Results saved to " << outputFile << "\n";
+                outputDir = "../output/" + outputFile + "_" + config.algorithmType + ".txt";
+                allocator.generateOutput(outputDir);
+                std::cout << "Allocation complete. Results saved to " << outputDir << "\n";
 
             } catch (const std::exception& e) {
                 // handle any parsing or logic errors gracefully
@@ -74,8 +75,7 @@
             // Teste Oficial 1 (Segundo a tabela: ranges1 + registers2)
             rangesFile = (argc > 1) ? argv[1] : "../ranges/ranges1.txt";
             registersFile = (argc > 2) ? argv[2] : "../registers/registers2.txt";
-            // Guardar diretamente na pasta build para não haver problemas de pastas em falta
-            outputFile = (argc > 3) ? argv[3] : "allocation_output.txt";
+            outputDir = (argc > 3) ? argv[3] : "../output/allocation_output.txt";
 
             int option = -1;
             while (option != 0) {
@@ -97,8 +97,8 @@
                         RegisterAllocator allocator(webs, config);
                         allocator.runBasicAllocation();
                         // 3. Gerar o ficheiro de saída
-                        allocator.generateOutput(outputFile);
-                        std::cout << "Concluido! Ficheiro gerado em: " << outputFile << "\n";
+                        allocator.generateOutput(outputDir);
+                        std::cout << "Concluido! Ficheiro gerado em: " << outputDir << "\n";
                         break;
                     }
                     case 2: {
@@ -107,8 +107,8 @@
                         Config config = Parser::parseConfig(registersFile);
                         RegisterAllocator allocator(webs, config);
                         allocator.runSpillingAllocation();
-                        allocator.generateOutput(outputFile);
-                        std::cout << "Concluido! Ficheiro gerado em: " << outputFile << "\n";
+                        allocator.generateOutput(outputDir);
+                        std::cout << "Concluido! Ficheiro gerado em: " << outputDir << "\n";
                         break;
                     }
                     case 3: {
@@ -119,8 +119,8 @@
                         if (config.algoParameter <= 0) config.algoParameter = 3;
                         RegisterAllocator allocator(webs, config);
                         allocator.runSplittingAllocation();
-                        allocator.generateOutput(outputFile);
-                        std::cout << "Concluido! Ficheiro gerado em: " << outputFile << "\n";
+                        allocator.generateOutput(outputDir);
+                        std::cout << "Concluido! Ficheiro gerado em: " << outputDir << "\n";
                         break;
                     }
                     case 4:
