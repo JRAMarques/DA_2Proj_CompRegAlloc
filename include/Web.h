@@ -66,7 +66,7 @@ struct Web {
      * @param other The other web we are checking against.
      * @return true if the webs share at least one active line, false otherwise.
      *
-     * @note Time Complexity: O(N log M), where N is the number of active lines in this web,
+     * @timecomplexity O(N log M), where N is the number of active lines in this web,
      * and M is the number of active lines in the other web (due to the std::set::find lookup).
      */
     bool interferesWith(const Web& other) const {

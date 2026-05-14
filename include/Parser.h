@@ -30,6 +30,8 @@ public:
      *
      * @param filename The path to the ranges.txt file.
      * @return std::vector<Web> A list of fully built Web objects ready for the interference graph.
+     * 
+     * @timecomplexity O(N^2 * L) where N is the number of raw live ranges parsed and L is the average number of active lines per range.
      */
     static std::vector<Web> parseLiveRanges(const std::string& filename);
 
@@ -38,6 +40,8 @@ public:
      *
      * @param filename The path to the registers.txt file.
      * @return Config A struct containing the max registers and the algorithm to run.
+     * 
+     * @timecomplexity O(L) where L is the number of lines in the configuration file.
      */
     static Config parseConfig(const std::string& filename);
 };

@@ -13,8 +13,8 @@ add_compile_options(-Wall -Wextra)
 include_directories(include)
 
 # grab all the source files inside the src folder
-file(GLOB SOURCES "src/*.cpp")
-file(GLOB HEADERS "include/*.h")
+file(GLOB_RECURSE SOURCES "src/*.cpp")
+file(GLOB_RECURSE HEADERS "include/*.h")
 
 # create the final executable named 'myProg' as requested in the project specs
 add_executable(myProg ${SOURCES} ${HEADERS})
