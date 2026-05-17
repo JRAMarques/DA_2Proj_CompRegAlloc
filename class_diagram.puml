@@ -1,0 +1,81 @@
+@startuml ClassDiagram
+skinparam classAttributeIconSize 0
+
+class Graph<T> {
+  # vertexSet : vector<Vertex<T>*>
+  + findVertex(const T &in) const : Vertex<T>*
+  + addVertex(const T &in) : bool
+  + addBidirectionalEdge(const T &sourc, const T &dest, double w) : bool
+  + getVertexSet() const : vector<Vertex<T>*>
+}
+
+class Vertex<T> {
+  # info : T
+  # adj : vector<Edge<T>*>
+  # incoming : vector<Edge<T>*>
+  
+  + getInfo() const : T
+  + getAdj() const : vector<Edge<T>*>
+}
+
+class Edge<T> {
+  # dest : Vertex<T>*
+  # weight : double
+  
+  + getDest() const : Vertex<T>*
+}
+
+struct Web {
+  + id : int
+  + varName : string
+  + activeLines : set<int>
+  + defLines : set<int>
+  + useLines : set<int>
+  + assignedRegister : int
+  
+  + Web(int assignedId, const string& name)
+  + interferesWith(const Web& other) const : bool
+  + operator==(const Web& other) const : bool
+  + findBiggestHole() const : pair<int, int>
+  + split(int newId1, int newId2, int splitPoint) const : pair<Web, Web>
+}
+
+struct Config {
+  + maxRegisters : int
+  + algorithmType : string
+  + algoParameter : int
+}
+
+class Parser {
+  + {static} parseLiveRanges(const string& filename) : vector<Web>
+  + {static} parseConfig(const string& filename) : Config
+}
+
+class RegisterAllocator {
+  - webs : vector<Web>
+  - config : Config
+  - interferenceGraph : Graph<int>
+  
+  - colorGraph(int numRegisters, int maxSpills) : bool
+  - buildInterferenceGraph() : void
+  
+  + RegisterAllocator(const vector<Web>& parsedWebs, const Config& parsedConfig)
+  + runBasicAllocation() : void
+  + runSpillingAllocation() : void
+  + runSplittingAllocation() : void
+  + runFreeAllocation() : void
+  + generateOutput(const string& filename) : void
+}
+
+Graph "1" *-- "*" Vertex : contains >
+Vertex "1" *-- "*" Edge : adj >
+Vertex "1" *-- "*" Edge : incoming >
+Edge  "*" --> "1" Vertex : dest >
+
+RegisterAllocator "1" *-- "*" Web : manages >
+RegisterAllocator "1" *-- "1" Config : uses >
+RegisterAllocator "1" *-- "1" Graph : coordinates >
+Parser ..> Web : creates >
+Parser ..> Config : creates >
+
+@enduml
